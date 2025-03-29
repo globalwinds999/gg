@@ -47,7 +47,7 @@ export default function FeaturesSection() {
           {features.map((feature, idx) => (
             <div
               key={idx}
-              className={`bg-white/5 p-6 rounded-xl shadow-lg backdrop-blur-md ${feature.animation}`}
+              className={\`bg-white/5 p-6 rounded-xl shadow-lg backdrop-blur-md \${feature.animation}\`}
             >
               <h3 className="text-xl font-semibold mb-3 text-white">{feature.title}</h3>
               <p className="text-gray-300 text-sm leading-relaxed">{feature.text}</p>
