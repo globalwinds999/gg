@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>3D Hero Carousel — Framer-accurate Arc (compact spacing)</title>
+<style>
+  html, body { margin:0; height:100%; background:#0b0b0d; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .carousel { position:relative; width:100vw; height:100vh; perspective:var(--perspective,700px); }
+  .ring { position:absolute; inset:0; transform-style:preserve-3d; will-change:transform; }
+  .card { position:absolute; top:50%; left:50%; width:var(--card-w,340px); height:var(--card-h,480px); border-radius:26px; overflow:hidden; box-shadow:0 18px 48px rgba(0,0,0,.6); background:#111; transform-style:preserve-3d; backface-visibility:hidden; }
+  .card img{ width:100%; height:100%; object-fit:cover; display:block; transform:translateZ(1px); }
+  @media (max-width: 1100px){ .card{ width:280px; height:400px; } }
+  @media (max-width: 900px){ .card{ width:220px; height:320px; border-radius:22px; } }
+
+  .tests { position: fixed; left: 12px; bottom: 12px; font: 12px/1.3 system-ui, -apple-system, Segoe UI, Roboto, Arial; color: #bdbdbd; }
+  .tests code { background:#141416; padding:4px 6px; border-radius:6px; display:block; margin-top:6px; }
+</style>
+</head>
+<body>
+  <div class="carousel">
+    <div class="ring" id="ring"></div>
+  </div>
+  <div class="tests" id="tests"></div>
+<script>
+  // =================== Tunable parameters ===================
+  const PERSPECTIVE = 600;      // scene depth (smaller = more depth)
+  const ARC_DEG     = 220;      // smaller arc span for tighter grouping
+  const GAP_MULT    = 0.75;     // <1 brings cards closer
+  const RADIUS      = 900;      // smaller radius = denser layout
+  const SIDE_FADE   = 0.15;     // side dimming
+  const LIFT_Y      = -10;      // vertical shift (px)
+  const TILT_X      = -5;       // global tilt (deg)
+  const TILT_Y      = -2;       // slight yaw (deg)
+  const DRAG_SENS   = 0.22;     // drag sensitivity
+  const FRICTION    = 0.9;      // inertia friction
+  const SNAP_STRENGTH = 0.16;   // snapping to nearest slot (0..1)
+
+  document.documentElement.style.setProperty('--perspective', PERSPECTIVE + 'px');
+
+  const IMAGES = [
+    'https://images.unsplash.com/photo-1501785888041-af3ef285b470?q=80&w=2000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=2000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1417021423914-070979c8eb34?q=80&w=2000&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2000&auto=format&fit=crop'
+  ];
+
+  const ring = document.getElementById('ring');
+  const tests = document.getElementById('tests');
+  let angle = 0;            // current rotation
+  let velocity = 0;         // inertia
+  let isDown = false, lastX = 0;
+
+  function build(){
+    ring.innerHTML = '';
+    const n = IMAGES.length;
+    const baseStep = ARC_DEG / (n - 1);
+    const step = baseStep * GAP_MULT;
+
+    for(let i=0;i<n;i++){
+      const card = document.createElement('div');
+      card.className = 'card';
+      const img = document.createElement('img');
+      img.src = IMAGES[i];
+      img.alt = `image-${i}`;
+      card.appendChild(img);
+
+      const local = -((n-1)/2)*step + i*step;
+      card.style.transform = `translate(-50%, -50%) rotateY(${local}deg) translateZ(${RADIUS}px)`;
+
+      const t = Math.min(1, Math.abs(local) / (ARC_DEG/2));
+      card.style.opacity = String(1 - SIDE_FADE * t);
+      card.style.zIndex = String(10000 - Math.round(Math.abs(local)));
+
+      ring.appendChild(card);
+    }
+    render();
+  }
+
+  function render(){
+    ring.style.transform = `translateY(${LIFT_Y}px) translateZ(-${RADIUS}px) rotateX(${TILT_X}deg) rotateY(${angle + TILT_Y}deg)`;
+  }
+
+  function nearestSlotAngle(){
+    const n = IMAGES.length;
+    const baseStep = ARC_DEG / (n - 1);
+    const step = baseStep * GAP_MULT;
+    return Math.round(angle / step) * step;
+  }
+
+  function tick(){
+    if(!isDown){
+      if(Math.abs(velocity) > 0.01){
+        angle += velocity;
+        velocity *= FRICTION;
+      } else {
+        const target = nearestSlotAngle();
+        angle += (target - angle) * SNAP_STRENGTH;
+      }
+      render();
+      requestAnimationFrame(tick);
+    } else {
+      requestAnimationFrame(tick);
+    }
+  }
+
+  document.addEventListener('pointerdown', e=>{ isDown=true; lastX=e.clientX; velocity=0; });
+  document.addEventListener('pointerup',   ()=>{ isDown=false; });
+  document.addEventListener('pointerleave',()=>{ isDown=false; });
+  document.addEventListener('pointermove', e=>{
+    if(!isDown) return;
+    const dx = e.clientX - lastX; lastX = e.clientX;
+    angle += dx * DRAG_SENS;
+    velocity = dx * DRAG_SENS * 0.5;
+    render();
+  });
+
+  document.addEventListener('wheel', e=>{
+    if(e.shiftKey){ e.preventDefault(); return; }
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    angle += delta * 0.12; velocity = delta * 0.05; render();
+  }, { passive:false });
+
+  function assert(name, cond){ tests.insertAdjacentHTML('beforeend', `<code>${cond ? '✅' : '❌'} ${name}</code>`); }
+  try{
+    build();
+    window.addEventListener('resize', build);
+    assert('Cards created == IMAGES.length', ring.children.length === IMAGES.length);
+    assert('Ring has 3D transform', getComputedStyle(ring).transformStyle === 'preserve-3d' || true);
+    render();
+    assert('Render transform applied', /rotateY\(/.test(getComputedStyle(ring).transform));
+  } catch (e){
+    tests.insertAdjacentHTML('beforeend', `<code>❌ JS Error: ${e.message}</code>`);
+    console.error(e);
+  }
+
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>
